@@ -11,7 +11,6 @@ import json
 import os
 from datetime import datetime
 
-root_folder = "C:/Users/Asus/OneDrive - Taechin-Intouch Accounting & Law Co.,Ltd/Other/Citizen Dev Project/OCR_Layout Donnut streamlit/"
 
 reader = easyocr.Reader(['th','en'], gpu=False)
 
