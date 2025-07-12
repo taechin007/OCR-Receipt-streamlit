@@ -17,48 +17,66 @@ reader = easyocr.Reader(['th', 'en'], gpu=True)
 st.set_page_config(page_title="Th-En receipt OCR Extractor", layout="wide")
 st.title("Th-En receipt OCR Extractor")
 st.markdown("Upload multiple PDF or image files of receipts/invoices to extract key fields.")
+st.markdown("by Taechin Srirat")
 
 proximity_ratio = st.sidebar.slider("Proximity Threshold (% of image diagonal)", 1, 20, 5) / 100.0
 
-preprocess_option = st.sidebar.selectbox(
-    "Preprocessing Method",
+st.sidebar.markdown("### Preprocessing Method")
+doc_type = st.sidebar.selectbox("Choose Document Type",
     [
-        "None",
-        "Grayscale",
-        "Thresholding (Binary)",
-        "Adaptive Thresholding",
-        "Denoise",
-        "Sharpen",
-        "Grayscale + Adaptive + Denoise",
-        "Grayscale + Sharpen",
-        "Grayscale + Thresholding",
-        "Denoise + Sharpen",
-        "Grayscale + Contrast Stretching",
-        "Adaptive + Denoise + Sharpen"
+        "🧾 Clean Scans",
+        "🗂️ Slightly Faded or Blurry",
+        "📜 Uneven Lighting or Shadow",
+        "🧹 Noisy or Compressed",
+        "🌈 Dull or Low Contrast",
+        "🔥 Aggressive Enhancement"
     ]
 )
 
-st.sidebar.markdown("""
-<hr>
-<div style='font-size: 10px'>
+method_options = {
+    "🧾 Clean Scans": [
+        "None", "Grayscale", "Grayscale + Thresholding", "Thresholding (Binary)"
+    ],
+    "🗂️ Slightly Faded or Blurry": [
+        "Sharpen", "Grayscale + Sharpen", "Denoise + Sharpen"
+    ],
+    "📜 Uneven Lighting or Shadow": [
+        "Adaptive Thresholding", "Grayscale + Adaptive + Denoise",
+        "Adaptive + Denoise + Sharpen"
+    ],
+    "🧹 Noisy or Compressed": [
+        "Denoise", "Denoise + Sharpen", "Grayscale + Adaptive + Denoise", "Grayscale + Denoise + Thresholding"
+    ],
+    "🌈 Dull or Low Contrast": [
+        "Grayscale + Contrast Stretching", "Contrast Stretching + Sharpen"
+    ],
+    "🔥 Aggressive Enhancement": [
+        "Grayscale + Denoise + Sharpen", "Adaptive + Denoise + Contrast Stretching",
+        "Grayscale + Adaptive + Denoise + Sharpen", "Adaptive + Denoise + Sharpen + Contrast"
+    ]
+}
 
+preprocess_option = st.sidebar.selectbox("Method", method_options[doc_type])
+
+st.sidebar.markdown("""
 ---
 ### ℹ️ Preprocessing Help
 
-- **None**: Use when input images are already clean and high-contrast.
-- **Grayscale**: Converts image to shades of gray. Useful for reducing color noise and focusing OCR on structure.
-- **Thresholding (Binary)**: Converts to black and white using global threshold. Best for well-lit, clean documents with sharp text.
-- **Adaptive Thresholding**: Dynamically binarizes regions with uneven lighting. Works well for shadowed or aged documents.
-- **Denoise**: Reduces speckle noise or background textures. Helps prevent OCR misreads on degraded paper or scanned artifacts.
-- **Sharpen**: Enhances edges. Useful if characters are blurry or slightly faded.
-- **Grayscale + Adaptive + Denoise**: Good general-purpose combo for moderate-quality documents with lighting and noise issues.
-- **Grayscale + Sharpen**: For slightly faded or low-contrast text. Improves edge clarity.
-- **Grayscale + Thresholding**: Ideal for clean scans with consistent lighting. Can over-binarize noisy scans.
-- **Denoise + Sharpen**: Removes artifacts and clarifies text simultaneously. Great for compressed or faxed documents.
-- **Grayscale + Contrast Stretching**: Improves brightness and dynamic range. Useful for dull, washed-out scans.
-- **Adaptive + Denoise + Sharpen**: Strongest option for difficult cases—blurry, low-quality, or unevenly lit scans.
-
-</div>
+- **None**: For already clean, high-contrast inputs.
+- **Grayscale**: Neutralizes color distractions.
+- **Thresholding (Binary)**: Strong contrast in perfect lighting.
+- **Adaptive Thresholding**: Uneven lighting fix.
+- **Denoise**: Removes paper noise or scan dust.
+- **Sharpen**: Enhances faint or blurry edges.
+- **Grayscale + Thresholding**: Clean scanned invoices.
+- **Grayscale + Adaptive + Denoise**: General purpose OCR for imperfect scans.
+- **Denoise + Sharpen**: Removes noise and enhances lines.
+- **Grayscale + Contrast Stretching**: Washed-out images.
+- **Contrast Stretching + Sharpen**: Overexposed, dull paper with low text.
+- **Grayscale + Adaptive + Denoise + Sharpen**: Highly noisy & dim.
+- **Grayscale + Denoise + Sharpen**: General documents with noise + blur.
+- **Grayscale + Denoise + Thresholding**: Mixed noise & good contrast.
+- **Adaptive + Denoise + Sharpen + Contrast**: Maximum correction (OCR rescue).
 """, unsafe_allow_html=True)
 
 def preprocess_image(pil_image, method):
@@ -83,6 +101,9 @@ def preprocess_image(pil_image, method):
         kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
         sharpened = cv2.filter2D(gray, -1, kernel)
         return Image.fromarray(sharpened)
+    elif method == "Grayscale + Thresholding":
+        _, thresh = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY)
+        return Image.fromarray(thresh)
     elif method == "Grayscale + Adaptive + Denoise":
         adapt = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
                                       cv2.THRESH_BINARY, 15, 10)
@@ -91,9 +112,6 @@ def preprocess_image(pil_image, method):
     elif method == "Grayscale + Sharpen":
         sharpen = cv2.filter2D(gray, -1, np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]]))
         return Image.fromarray(sharpen)
-    elif method == "Grayscale + Thresholding":
-        _, thresh = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY)
-        return Image.fromarray(thresh)
     elif method == "Denoise + Sharpen":
         denoise = cv2.fastNlMeansDenoising(gray, h=30)
         sharpen = cv2.filter2D(denoise, -1, np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]]))
@@ -101,12 +119,38 @@ def preprocess_image(pil_image, method):
     elif method == "Grayscale + Contrast Stretching":
         norm = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
         return Image.fromarray(norm)
-    elif method == "Adaptive + Denoise + Sharpen":
+    elif method == "Contrast Stretching + Sharpen":
+        norm = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
+        sharpen = cv2.filter2D(norm, -1, np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]]))
+        return Image.fromarray(sharpen)
+    elif method == "Grayscale + Denoise + Sharpen":
+        denoise = cv2.fastNlMeansDenoising(gray, h=30)
+        sharpen = cv2.filter2D(denoise, -1, np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]]))
+        return Image.fromarray(sharpen)
+    elif method == "Grayscale + Denoise + Thresholding":
+        denoise = cv2.fastNlMeansDenoising(gray, h=30)
+        _, thresh = cv2.threshold(denoise, 128, 255, cv2.THRESH_BINARY)
+        return Image.fromarray(thresh)
+    elif method == "Adaptive + Denoise + Contrast Stretching":
+        adapt = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+                                      cv2.THRESH_BINARY, 15, 10)
+        denoise = cv2.fastNlMeansDenoising(adapt, h=30)
+        norm = cv2.normalize(denoise, None, 0, 255, cv2.NORM_MINMAX)
+        return Image.fromarray(norm)
+    elif method == "Grayscale + Adaptive + Denoise + Sharpen":
         adapt = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
                                       cv2.THRESH_BINARY, 15, 10)
         denoise = cv2.fastNlMeansDenoising(adapt, h=30)
         sharpen = cv2.filter2D(denoise, -1, np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]]))
         return Image.fromarray(sharpen)
+    elif method == "Adaptive + Denoise + Sharpen + Contrast":
+        adapt = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+                                      cv2.THRESH_BINARY, 15, 10)
+        denoise = cv2.fastNlMeansDenoising(adapt, h=30)
+        sharpen = cv2.filter2D(denoise, -1, np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]]))
+        norm = cv2.normalize(sharpen, None, 0, 255, cv2.NORM_MINMAX)
+        return Image.fromarray(norm)
+
     return pil_image
 
 def get_center(bbox):
